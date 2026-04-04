@@ -177,39 +177,22 @@ function MapLinks({ start, waypoints, end }) {
 async function fetchAIRecommendation(region, preferences, userInput) {
   const regionName = REGIONS.find(r => r.id === region)?.name || region;
   const prefLabels = preferences.map(p => PREFERENCES.find(x => x.id === p)?.label).join(", ");
-  const prompt = `당신은 한국 오토바이 라이딩 전문가입니다. 다음 조건에 맞는 오토바이 코스를 추천해주세요.
+  const prompt = `당신은 한국 오토바이 라이딩 전문가입니다. 다음 조건에 맞는 오토바이 코스를 추천해주세요.\n\n지역: ${regionName}\n선호 스타일: ${prefLabels || "제한 없음"}\n추가 요청: ${userInput || "없음"}\n\n다음 JSON 형식으로만 응답하세요 (마크다운 없이):\n{"title":"코스 이름","distance":"총 거리","time":"예상 소요시간","startPoint":"출발지","endPoint":"도착지","waypoints":["경유지1","경유지2"],"highlights":["볼거리1","볼거리2","볼거리3"],"roadType":"도로 특성","bestSeason":"최적 시즌","caution":"주의사항","tip":"라이더 팁","difficulty":"초급 또는 중급 또는 고급"}`;
 
-지역: ${regionName}
-선호 스타일: ${prefLabels || "제한 없음"}
-추가 요청: ${userInput || "없음"}
-
-다음 JSON 형식으로만 응답하세요 (마크다운 없이):
-{
-  "title": "코스 이름",
-  "distance": "총 거리",
-  "time": "예상 소요시간",
-  "startPoint": "출발지 (실제 지명)",
-  "endPoint": "도착지 (실제 지명)",
-  "waypoints": ["경유지1", "경유지2"],
-  "highlights": ["볼거리1", "볼거리2", "볼거리3"],
-  "roadType": "도로 특성 (2-3문장)",
-  "bestSeason": "최적 시즌",
-  "caution": "주의사항",
-  "tip": "라이더 팁",
-  "difficulty": "초급 또는 중급 또는 고급"
-}`;
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  const apiKey = process.env.REACT_APP_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1000 },
+      }),
+    }
+  );
   const data = await response.json();
-  const text = data.content?.map(i => i.text || "").join("") || "";
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
 
