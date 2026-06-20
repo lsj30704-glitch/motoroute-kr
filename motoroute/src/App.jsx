@@ -1,4 +1,6 @@
 import { useState, useCallback } from "react";
+import { getSmartRecommendation } from "./utils/recommend";
+import PRESET_COURSES from "./data/presetCourses.json";
 
 const REGIONS = [
   { id: "gangwon", name: "강원도", emoji: "⛰️", color: "#2d6a4f" },
@@ -17,35 +19,6 @@ const PREFERENCES = [
   { id: "landmark", label: "명소 경유", icon: "📍" },
   { id: "coastal", label: "해안도로", icon: "🌊" },
 ];
-
-const PRESET_COURSES = {
-  gangwon: [
-    { name: "동해안 7번 국도", distance: "약 180km", time: "3-4시간", highlights: ["정동진", "강릉항", "속초"], difficulty: "초급", type: "해안+경치", start: "강릉", end: "속초", waypoints: ["정동진"] },
-    { name: "대관령 와인딩", distance: "약 80km", time: "2시간", highlights: ["대관령", "선자령", "강릉"], difficulty: "중급", type: "와인딩", start: "강릉", end: "평창", waypoints: ["대관령"] },
-    { name: "설악 서킷", distance: "약 120km", time: "2.5시간", highlights: ["속초", "설악산", "인제"], difficulty: "중급", type: "경치+와인딩", start: "속초", end: "인제", waypoints: ["설악산"] },
-  ],
-  gyeonggi: [
-    { name: "남한강 라이딩", distance: "약 100km", time: "2시간", highlights: ["양평", "여주", "이포보"], difficulty: "초급", type: "강변", start: "양평", end: "여주", waypoints: ["이포보"] },
-    { name: "파주 임진각 코스", distance: "약 90km", time: "2시간", highlights: ["파주", "임진각", "헤이리"], difficulty: "초급", type: "드라이브", start: "파주", end: "임진각", waypoints: ["헤이리"] },
-  ],
-  chungcheong: [
-    { name: "태안 해안 코스", distance: "약 150km", time: "3시간", highlights: ["태안", "만리포", "안면도"], difficulty: "초급", type: "해안", start: "태안", end: "안면도", waypoints: ["만리포"] },
-    { name: "소백산 와인딩", distance: "약 130km", time: "3시간", highlights: ["단양", "구인사", "죽령"], difficulty: "중급", type: "와인딩+경치", start: "단양", end: "죽령", waypoints: ["구인사"] },
-  ],
-  gyeongsang: [
-    { name: "남해 독일마을 코스", distance: "약 160km", time: "3-4시간", highlights: ["남해", "독일마을", "다랭이마을"], difficulty: "중급", type: "해안+경치", start: "남해", end: "하동", waypoints: ["독일마을"] },
-    { name: "경주 역사 코스", distance: "약 80km", time: "2시간", highlights: ["경주", "불국사", "첨성대"], difficulty: "초급", type: "문화+드라이브", start: "경주시", end: "불국사", waypoints: ["첨성대"] },
-    { name: "가야산 코스", distance: "약 100km", time: "2.5시간", highlights: ["합천", "해인사", "가야산"], difficulty: "중급", type: "와인딩+경치", start: "합천", end: "가야산", waypoints: ["해인사"] },
-  ],
-  jeolla: [
-    { name: "지리산 둘레길 코스", distance: "약 200km", time: "4시간", highlights: ["구례", "화엄사", "천은사"], difficulty: "중급", type: "경치+와인딩", start: "구례", end: "하동", waypoints: ["화엄사"] },
-    { name: "서해안 낙조 코스", distance: "약 140km", time: "3시간", highlights: ["변산반도", "채석강", "모항"], difficulty: "초급", type: "해안+경치", start: "부안", end: "고창", waypoints: ["채석강"] },
-  ],
-  jeju: [
-    { name: "제주 일주 코스", distance: "약 180km", time: "4-5시간", highlights: ["성산일출봉", "중문", "한림"], difficulty: "초급", type: "해안+명소", start: "제주시", end: "서귀포", waypoints: ["성산일출봉", "중문"] },
-    { name: "한라산 횡단", distance: "약 100km", time: "2.5시간", highlights: ["제주시", "1100고지", "서귀포"], difficulty: "중급", type: "산악+경치", start: "제주시", end: "서귀포", waypoints: ["1100고지"] },
-  ],
-};
 
 const difficultyColor = { "초급": "#2d6a4f", "중급": "#e67e22", "고급": "#e63946" };
 
@@ -174,23 +147,6 @@ function MapLinks({ start, waypoints, end }) {
   );
 }
 
-async function fetchAIRecommendation(region, preferences, userInput) {
-  const regionName = REGIONS.find(r => r.id === region)?.name || region;
-  const prefLabels = preferences.map(p => PREFERENCES.find(x => x.id === p)?.label).join(", ");
-
-  const response = await fetch("/api/recommend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      region: regionName,
-      preferences: prefLabels,
-      userInput: userInput,
-    }),
-  });
-  if (!response.ok) throw new Error("서버 오류");
-  return await response.json();
-}
-
 export default function MotoApp() {
   const [step, setStep] = useState("home");
   const [selectedRegion, setSelectedRegion] = useState(null);
@@ -204,14 +160,18 @@ export default function MotoApp() {
   const togglePref = (id) =>
     setSelectedPrefs(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
 
+  // 외부 API 호출 없이 등록된 코스 데이터를 선호도/입력 텍스트로 점수화하는 로컬 추천 엔진을 사용합니다.
   const handleAIRecommend = useCallback(async () => {
     setLoading(true); setError(""); setAiResult(null);
     try {
-      const result = await fetchAIRecommendation(selectedRegion, selectedPrefs, userInput);
+      // "AI가 분석 중" UX를 유지하기 위한 짧은 지연 (실제 네트워크 호출은 없음)
+      await new Promise(resolve => setTimeout(resolve, 650));
+      const result = getSmartRecommendation(selectedRegion, selectedPrefs, userInput);
+      if (!result) throw new Error("no-course-found");
       setAiResult(result);
       setStep("result");
     } catch (e) {
-      setError("AI 추천 중 오류가 발생했습니다. 다시 시도해주세요.");
+      setError("추천 코스를 찾지 못했습니다. 다른 조건으로 다시 시도해주세요.");
     } finally {
       setLoading(false);
     }
@@ -396,7 +356,10 @@ export default function MotoApp() {
           <div>
             <div style={{ background: `linear-gradient(135deg,${region?.color || "#ff6b35"}33,rgba(255,107,53,0.1))`, border: `1px solid ${region?.color || "#ff6b35"}44`, borderRadius: 18, padding: 20, marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: "#ff8c65", fontWeight: 600, marginBottom: 6 }}>🤖 AI 추천 코스</div>
-              <h2 style={{ margin: "0 0 10px", fontSize: 22, fontWeight: 800, letterSpacing: "-0.5px" }}>{aiResult.title}</h2>
+              <h2 style={{ margin: "0 0 6px", fontSize: 22, fontWeight: 800, letterSpacing: "-0.5px" }}>{aiResult.title}</h2>
+              {aiResult.note && (
+                <div style={{ fontSize: 11, color: "#999", marginBottom: 10 }}>{aiResult.note}</div>
+              )}
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, color: "#ccc" }}>📏 {aiResult.distance}</span>
                 <span style={{ fontSize: 13, color: "#ccc" }}>⏱️ {aiResult.time}</span>
