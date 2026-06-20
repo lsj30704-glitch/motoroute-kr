@@ -47,8 +47,18 @@ npm start
 
 ## 기능
 
-- 🤖 AI 맞춤 코스 추천 (Claude API)
+- 🤖 맞춤 코스 추천 (외부 API 없이 동작하는 로컬 추천 엔진)
 - 🌤️ 지역별 날씨 및 라이딩 가능 여부
 - 🗺️ 카카오맵 / 네이버맵 / 구글맵 연동
 - 📋 전국 6개 지역 기본 코스 내장
 - 📱 모바일 PWA 지원
+
+## 🤖 AI 추천 엔진 동작 방식
+
+이전 버전은 `/api/recommend`를 통해 외부 AI API(Claude) 호출을 시도했지만, 해당 백엔드 함수가 저장소에 없어 실제로는 동작하지 않았습니다.
+지금은 별도 API 키나 서버 없이, `src/data/presetCourses.json`에 등록된 코스 데이터를 사용자가 고른 선호도(경치/와인딩/해안/명소/당일치기/1박 이상)와 자유 입력 텍스트로 점수화해 가장 적합한 코스를 즉시 추천합니다.
+
+- 관련 코드: `src/utils/recommend.js` (`getSmartRecommendation`)
+- 데이터: `src/data/presetCourses.json`
+- 장점: 비용 0원, 네트워크 호출 없음, 오프라인에서도 동작
+- 코스를 추가/수정하려면 `presetCourses.json`에 지역별 배열 항목을 추가하면 됩니다.
